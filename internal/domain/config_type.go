@@ -69,6 +69,10 @@ func (t ConfigType) Field(name string) (FieldSpec, bool) {
 	return FieldSpec{}, false
 }
 
+func (f FieldSpec) Policy(environment string) FieldPolicy {
+	return CompileFieldPolicy(f, environment)
+}
+
 func (t ConfigType) SupportsEnvironment(environment string) bool {
 	for _, candidate := range t.Environments {
 		if candidate == environment {

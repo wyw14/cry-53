@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -67,37 +66,41 @@ func (v *SchemaValidator) Validate(ctx context.Context, configs []domain.Configu
 }
 
 func validateValue(spec domain.FieldSpec, value any, environment string) string {
-	if len(spec.Environments) > 0 && !contains(spec.Environments, environment) {
-		return "字段不能用于当前环境"
+	verdict := spec.Policy(environment).Evaluate(value)
+	if verdict.Accepted {
+		return ""
 	}
-	switch spec.Kind {
-	case domain.FieldString, domain.FieldRef:
-		text, ok := value.(string)
-		if !ok {
-			return "字段必须是字符串"
+	return verdict.Reason
+	/*
+		switch spec.Kind {
+		case domain.FieldString, domain.FieldRef:
+			text, ok := value.(string)
+			if !ok {
+				return "字段必须是字符串"
+			}
+			if spec.Pattern != "" && !regexp.MustCompile(spec.Pattern).MatchString(text) {
+				return "字段值不符合格式约束"
+			}
+		case domain.FieldNumber:
+			number, ok := numeric(value)
+			if !ok {
+				return "字段必须是数字"
+			}
+			if spec.Min != nil && number < *spec.Min {
+				return fmt.Sprintf("字段值不能小于 %v", *spec.Min)
+			}
+			if spec.Max != nil && number > *spec.Max {
+				return fmt.Sprintf("字段值不能大于 %v", *spec.Max)
+			}
+		case domain.FieldBool:
+			if _, ok := value.(bool); !ok {
+				return "字段必须是布尔值"
+			}
+		default:
+			return "字段类型不受支持"
 		}
-		if spec.Pattern != "" && !regexp.MustCompile(spec.Pattern).MatchString(text) {
-			return "字段值不符合格式约束"
-		}
-	case domain.FieldNumber:
-		number, ok := numeric(value)
-		if !ok {
-			return "字段必须是数字"
-		}
-		if spec.Min != nil && number < *spec.Min {
-			return fmt.Sprintf("字段值不能小于 %v", *spec.Min)
-		}
-		if spec.Max != nil && number > *spec.Max {
-			return fmt.Sprintf("字段值不能大于 %v", *spec.Max)
-		}
-	case domain.FieldBool:
-		if _, ok := value.(bool); !ok {
-			return "字段必须是布尔值"
-		}
-	default:
-		return "字段类型不受支持"
-	}
-	return ""
+		return ""
+	*/
 }
 
 func numeric(value any) (float64, bool) {
