@@ -61,13 +61,10 @@ func requireCleanValidation(request ApprovalRequest) ApprovalDenial {
 }
 
 func requireSeparatedDuties(request ApprovalRequest) ApprovalDenial {
-	if request.UploadedBy != request.Actor.ID {
-		return ApprovalAllowed
+	if request.UploadedBy == request.Actor.ID {
+		return ApprovalDutyNotSeparated
 	}
-	if request.Actor.HasRole("approver") {
-		return ApprovalAllowed
-	}
-	return ApprovalDutyNotSeparated
+	return ApprovalAllowed
 }
 
 func (d ApprovalDecision) Error() error {
