@@ -1,0 +1,51 @@
+openapi: 3.0.3
+info:
+  title: 数据源配置包校验与发布平台
+  version: 1.0.0
+servers:
+  - url: /api/v1
+paths:
+  /bundles:
+    post:
+      summary: 上传 JSON 配置包
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201': { description: 已接收 }
+        '422': { description: 格式或字段错误 }
+  /bundles/{id}/validate:
+    post:
+      summary: 执行字段、依赖、循环和环境校验
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 校验报告 }
+  /bundles/{id}/approve:
+    post:
+      summary: 审批通过配置包
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 已批准 }
+  /bundles/{id}/publish:
+    post:
+      summary: 原子发布全部或选择的配置
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+        - { in: header, name: Idempotency-Key, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 已发布 }
+        '409': { description: 状态、版本或幂等冲突 }
+
