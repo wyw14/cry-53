@@ -67,6 +67,11 @@ func (s *LifecycleService) Rollback(ctx context.Context, request domain.Rollback
 	if err != nil {
 		return domain.Configuration{}, fmt.Errorf("target version: %w", err)
 	}
+	plan, err := domain.PlanRollback(current, target, request, actor, s.clock.Now())
+	if err != nil {
+		return domain.Configuration{}, err
+	}
+	current = plan.Apply(current)
 	current.Values = target.Values
 	current.Tags = append([]string(nil), target.Tags...)
 	current.Version++
@@ -76,7 +81,7 @@ func (s *LifecycleService) Rollback(ctx context.Context, request domain.Rollback
 	if err := s.configs.Update(ctx, current, request.ExpectedRevision); err != nil {
 		return domain.Configuration{}, err
 	}
-	version := domain.Version{ID: s.ids.New("ver"), ConfigurationID: current.ID, Number: current.Version, Values: current.Clone().Values, Tags: append([]string(nil), current.Tags...), Reason: "rollback: " + request.Reason, CreatedBy: actor.ID, CreatedAt: s.clock.Now()}
+	version := plan.Successor(s.ids.New("ver"))
 	if err := s.versions.Create(ctx, version); err != nil {
 		return domain.Configuration{}, err
 	}
