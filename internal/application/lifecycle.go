@@ -20,6 +20,15 @@ func NewLifecycleService(configs repository.ConfigurationRepository, versions re
 	return &LifecycleService{configs: configs, versions: versions, audits: audits, clock: clock, ids: ids}
 }
 
+func decideLifecycleApproval(bundle domain.Bundle, actor domain.Actor) domain.ApprovalDecision {
+	return domain.DecideBundleApproval(domain.ApprovalRequest{
+		State:      bundle.State,
+		Issues:     bundle.Issues,
+		UploadedBy: bundle.UploadedBy,
+		Actor:      actor,
+	})
+}
+
 func (s *LifecycleService) Transition(ctx context.Context, id string, target domain.ConfigStatus, expected int64, actor domain.Actor, requestID string) (domain.Configuration, error) {
 	if !actor.HasRole("publisher") && !actor.HasRole("platform_admin") {
 		return domain.Configuration{}, domain.ErrForbidden

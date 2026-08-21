@@ -125,18 +125,13 @@ func (w *BundleWorkflow) Preview(ctx context.Context, id string, actor domain.Ac
 }
 
 func (w *BundleWorkflow) Approve(ctx context.Context, id string, actor domain.Actor) (domain.Bundle, error) {
-	if err := authorizeBundleAction(actor, actionApprove); err != nil {
-		return domain.Bundle{}, err
-	}
 	bundle, err := w.bundles.Get(ctx, id)
 	if err != nil {
 		return domain.Bundle{}, err
 	}
-	if bundle.State != domain.BundleValidated || bundle.HasErrors() {
-		return domain.Bundle{}, domain.ErrInvalidTransition
-	}
-	if bundle.UploadedBy == actor.ID {
-		return domain.Bundle{}, fmt.Errorf("uploader cannot approve own bundle: %w", domain.ErrForbidden)
+	decision := decideLifecycleApproval(bundle, actor)
+	if !decision.Allowed {
+		return domain.Bundle{}, decision.Error()
 	}
 	now := w.clock.Now()
 	bundle.State = domain.BundleApproved
