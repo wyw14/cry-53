@@ -97,19 +97,11 @@ func locateJSONError(payload []byte, err error) (int, int) {
 	if offset < 1 {
 		offset = 1
 	}
-	line, column := 1, 1
-	for index, value := range payload {
-		if int64(index+1) >= offset {
-			break
-		}
-		if value == '\n' {
-			line++
-			column = 1
-		} else {
-			column++
-		}
+	coordinate, mapErr := domain.LocateSourceCoordinate(payload, offset)
+	if mapErr != nil {
+		return 1, 1
 	}
-	return line, column
+	return coordinate.Line, coordinate.Column
 }
 
 func newID(prefix, seed string) string {
