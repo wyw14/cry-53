@@ -25,6 +25,7 @@ type BundleWorkflow struct {
 	clock        Clock
 	ids          IDGenerator
 	notifier     Notifier
+	publications *PublicationCoordinator
 }
 
 type UploadCommand struct {
@@ -57,7 +58,7 @@ type publicationPlan struct {
 }
 
 func NewBundleWorkflow(parser *service.BundleParser, schema *service.SchemaValidator, dependencies *service.DependencyValidator, diff *service.DiffService, bundles repository.BundleRepository, tx repository.TransactionManager, clock Clock, ids IDGenerator, notifier Notifier) *BundleWorkflow {
-	return &BundleWorkflow{parser: parser, schema: schema, dependencies: dependencies, diff: diff, bundles: bundles, tx: tx, clock: clock, ids: ids, notifier: notifier}
+	return &BundleWorkflow{parser: parser, schema: schema, dependencies: dependencies, diff: diff, bundles: bundles, tx: tx, clock: clock, ids: ids, notifier: notifier, publications: NewPublicationCoordinator()}
 }
 
 func (w *BundleWorkflow) Upload(ctx context.Context, command UploadCommand) (domain.Bundle, error) {
@@ -153,11 +154,19 @@ func (w *BundleWorkflow) Publish(ctx context.Context, command PublishCommand) (d
 	if err := authorizeBundleAction(command.Actor, actionPublish); err != nil {
 		return domain.Bundle{}, err
 	}
+	permit, err := w.publications.Enter(ctx)
+	if err != nil {
+		return domain.Bundle{}, err
+	}
+	defer permit.Close()
 	if command.IdempotencyKey == "" {
 		return domain.Bundle{}, domain.ErrIdempotencyReuse
 	}
 	bundle, err := w.bundles.Get(ctx, command.BundleID)
 	if err != nil {
+		return domain.Bundle{}, err
+	}
+	if err := validateFreshPublication(bundle); err != nil {
 		return domain.Bundle{}, err
 	}
 	plan, err := planPublication(bundle, command.SelectedIDs)
@@ -171,8 +180,8 @@ func (w *BundleWorkflow) Publish(ctx context.Context, command PublishCommand) (d
 	if replayed {
 		return previous, nil
 	}
-	if bundle.State != domain.BundleApproved || bundle.HasErrors() {
-		return domain.Bundle{}, domain.ErrInvalidTransition
+	if err := permit.BeginWrite(); err != nil {
+		return domain.Bundle{}, err
 	}
 	transaction, err := w.tx.Begin(ctx)
 	if err != nil {
