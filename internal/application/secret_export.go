@@ -58,7 +58,7 @@ func (s *SecretService) Export(ctx context.Context, id string, policy domain.Exp
 	if err != nil {
 		return domain.ExportedConfiguration{}, err
 	}
-	allowSensitive := policy.AllowSensitive && actor.HasRole("secret_exporter") && policy.Reason != "" && policy.ExpiresAt.After(s.clock.Now())
+	decision := domain.EvaluateDisclosure(policy, actor, s.clock.Now())
 	values := item.Clone().Values
 	masked := false
 	for _, field := range definition.Fields {
@@ -69,7 +69,7 @@ func (s *SecretService) Export(ctx context.Context, id string, policy domain.Exp
 		if !ok || value == "" {
 			continue
 		}
-		if !allowSensitive {
+		if decision.ShouldMask() {
 			values[field.Name] = maskSecret(value)
 			masked = true
 			continue
@@ -84,7 +84,7 @@ func (s *SecretService) Export(ctx context.Context, id string, policy domain.Exp
 		values[field.Name] = decrypted
 	}
 	result := domain.ExportedConfiguration{ID: item.ID, Name: item.Name, Type: item.Type, Environment: item.Environment, Version: item.Version, Values: values, Masked: masked, ExportedAt: s.clock.Now()}
-	_ = s.audits.Append(ctx, domain.AuditEvent{ID: s.ids.New("audit"), RequestID: requestID, ActorID: actor.ID, Operation: "configuration.export", Target: domain.AuditTarget{Kind: "configuration", ID: id}, Facts: map[string]any{"sensitive": allowSensitive, "reason": policy.Reason}, OccurredAt: s.clock.Now()})
+	_ = s.audits.Append(ctx, domain.AuditEvent{ID: s.ids.New("audit"), RequestID: requestID, ActorID: actor.ID, Operation: "configuration.export", Target: domain.AuditTarget{Kind: "configuration", ID: id}, Facts: decision.AuditFacts(), OccurredAt: s.clock.Now()})
 	return result, nil
 }
 
