@@ -37,7 +37,11 @@ func (v *DependencyValidator) Validate(ctx context.Context, configs []domain.Con
 			issues = append(issues, issue("LOOKUP_FAILED", fmt.Sprintf("configurations[%d]", index), "无法检查现有配置", "稍后重试"))
 		}
 	}
-	graph := make(map[string][]string)
+	nodes := make([]domain.DependencyNode, 0, len(configs))
+	for _, config := range configs {
+		nodes = append(nodes, domain.DependencyNode{ID: config.ID, Environment: config.Environment})
+	}
+	graph := domain.NewDependencyGraph(nodes)
 	for index, config := range configs {
 		definition, err := v.types.Get(ctx, config.Type)
 		if err != nil {
@@ -51,7 +55,6 @@ func (v *DependencyValidator) Validate(ctx context.Context, configs []domain.Con
 			if !ok || target == "" {
 				continue
 			}
-			graph[config.ID] = append(graph[config.ID], target)
 			targetConfig, inBundle := byID[target]
 			if !inBundle {
 				targetConfig, err = v.configs.Get(ctx, target)
@@ -60,12 +63,15 @@ func (v *DependencyValidator) Validate(ctx context.Context, configs []domain.Con
 					continue
 				}
 			}
+			if !graph.Connect(domain.DependencyEdge{From: config.ID, To: target}) {
+				continue
+			}
 			if targetConfig.Environment != config.Environment {
 				issues = append(issues, issue("ENVIRONMENT_CONFLICT", fmt.Sprintf("configurations[%d].values.%s", index, field.Name), "引用跨越了环境边界", "引用同一环境中的配置版本"))
 			}
 		}
 	}
-	for _, cycle := range findCycles(graph) {
+	for _, cycle := range graph.Cycles() {
 		issues = append(issues, issue("REFERENCE_CYCLE", "configurations", "检测到循环引用: "+fmt.Sprint(cycle), "解除环中的至少一条引用"))
 	}
 	return issues
