@@ -244,16 +244,14 @@ func (w *BundleWorkflow) evaluateBundle(ctx context.Context, configurations []do
 
 func findBundleReplay(ctx context.Context, bundles repository.BundleRepository, key, expectedHash string) (domain.Bundle, bool, error) {
 	id, recordedHash, err := bundles.FindByIdempotency(ctx, key)
-	if errors.Is(err, domain.ErrNotFound) {
+	decision := repository.ClassifyReplay(repository.ReplayObservation{ResourceID: id, RecordedHash: recordedHash, ExpectedHash: expectedHash, LookupError: err})
+	switch decision.Kind {
+	case repository.ReplayMissing:
 		return domain.Bundle{}, false, nil
+	case repository.ReplayConflict, repository.ReplayFailure:
+		return domain.Bundle{}, false, decision.Cause
 	}
-	if err != nil {
-		return domain.Bundle{}, false, err
-	}
-	if recordedHash != expectedHash {
-		return domain.Bundle{}, false, domain.ErrIdempotencyReuse
-	}
-	bundle, err := bundles.Get(ctx, id)
+	bundle, err := bundles.Get(ctx, decision.ResourceID)
 	return bundle, err == nil, err
 }
 
