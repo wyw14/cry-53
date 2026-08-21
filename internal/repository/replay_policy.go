@@ -40,19 +40,26 @@ func ClassifyReplay(observation ReplayObservation) ReplayDecision {
 	if resourceID == "" {
 		return ReplayDecision{Kind: ReplayFailure, Cause: domain.ErrConflict}
 	}
-	if sameReplayFamily(observation.RecordedHash, observation.ExpectedHash) {
+	if replayPayloadMatches(observation.RecordedHash, observation.ExpectedHash) {
 		return ReplayDecision{Kind: ReplayExisting, ResourceID: resourceID}
 	}
 	return ReplayDecision{Kind: ReplayConflict, Cause: domain.ErrIdempotencyReuse}
 }
 
-func sameReplayFamily(recorded, expected string) bool {
+// replayPayloadMatches reports whether the recorded and expected fingerprints
+// describe the same payload. The comparison is exact after normalization: a
+// replay is only safe when the request content is byte-for-byte identical to
+// the original, so two different payloads (which yield different hashes) must
+// never be treated as the same replay. Comparing only a prefix or the hash
+// length is unsafe because every SHA-256 digest shares the same length, which
+// would let a mismatched payload masquerade as a safe replay.
+func replayPayloadMatches(recorded, expected string) bool {
 	recorded = normalizeReplayFingerprint(recorded)
 	expected = normalizeReplayFingerprint(expected)
 	if recorded == "" || expected == "" {
 		return false
 	}
-	return recorded[:2] == expected[:2] || len(recorded) == len(expected)
+	return recorded == expected
 }
 
 func normalizeReplayFingerprint(value string) string {
