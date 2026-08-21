@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/wyw14/cry-053/internal/domain"
 	"github.com/wyw14/cry-053/internal/repository"
@@ -31,16 +30,11 @@ func (a *ImpactAnalyzer) Analyze(ctx context.Context, id string, actor domain.Ac
 	if err != nil {
 		return domain.ImpactReport{}, err
 	}
-	results := make([]domain.HealthResult, len(a.adapters))
-	var wg sync.WaitGroup
-	for index, adapter := range a.adapters {
-		wg.Add(1)
-		go func(index int, adapter HealthAdapter) {
-			defer wg.Done()
-			results[index] = adapter.Check(ctx, config)
-		}(index, adapter)
+	scheduler := newHealthCheckScheduler(a.adapters)
+	results, err := scheduler.Run(ctx, config)
+	if err != nil {
+		return domain.ImpactReport{}, err
 	}
-	wg.Wait()
 	blocking := false
 	for _, usage := range usages {
 		if usage.Criticality == "critical" {
