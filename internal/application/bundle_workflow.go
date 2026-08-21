@@ -166,19 +166,25 @@ func (w *BundleWorkflow) Publish(ctx context.Context, command PublishCommand) (d
 	if err != nil {
 		return domain.Bundle{}, err
 	}
-	if err := validateFreshPublication(bundle); err != nil {
-		return domain.Bundle{}, err
-	}
 	plan, err := planPublication(bundle, command.SelectedIDs)
 	if err != nil {
 		return domain.Bundle{}, err
 	}
+	// Replay must be resolved before the freshness guard: once a concurrent
+	// publisher commits, the bundle advances out of the approved state, so a
+	// state check would reject a legitimate replay before the idempotency
+	// record can be matched. The plan hash is derived only from the bundle's
+	// configuration selection, which the publish does not mutate, so it stays
+	// stable across the race window.
 	previous, replayed, err := findBundleReplay(ctx, w.bundles, command.IdempotencyKey, plan.hash)
 	if err != nil {
 		return domain.Bundle{}, err
 	}
 	if replayed {
 		return previous, nil
+	}
+	if err := validateFreshPublication(bundle); err != nil {
+		return domain.Bundle{}, err
 	}
 	if err := permit.BeginWrite(); err != nil {
 		return domain.Bundle{}, err

@@ -47,4 +47,12 @@ func TestBundlePublishConcurrentReplayWritesOnce(t *testing.T) {
 	if err != nil || total != 1 || len(items) != 1 || items[0].Version != 1 {
 		t.Fatalf("items=%+v total=%d err=%v", items, total, err)
 	}
+	versions, err := memory.Versions(system.store).List(context.Background(), items[0].ID)
+	if err != nil || len(versions) != 1 || versions[0].Number != 1 {
+		t.Fatalf("versions=%+v err=%v", versions, err)
+	}
+	events, _, err := memory.Audits(system.store).List(context.Background(), domain.PageRequest{Page: 1, Size: 10, Sort: "occurred_at_desc", Filters: map[string]string{"operation": "configuration.publish"}})
+	if err != nil || len(events) != 1 {
+		t.Fatalf("publish events=%+v err=%v", events, err)
+	}
 }
