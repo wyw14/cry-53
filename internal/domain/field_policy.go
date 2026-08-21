@@ -45,7 +45,8 @@ func (p FieldPolicy) evaluateSensitive(value any) FieldVerdict {
 	if value == nil || value == "" {
 		return FieldVerdict{Reason: "敏感字段不能为空"}
 	}
-	return FieldVerdict{Accepted: true}
+	// 敏感字段仍须满足字段类型规范，避免数字/布尔等错误类型绕过校验。
+	return p.evaluateShape(value)
 }
 
 func (p FieldPolicy) evaluateShape(value any) FieldVerdict {
