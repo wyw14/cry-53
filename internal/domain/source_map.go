@@ -11,13 +11,11 @@ type SourceCoordinate struct {
 }
 
 type sourceCursor struct {
-	line              int
-	column            int
-	insideString      bool
-	escaped           bool
-	arrayDepth        int
-	suppressArrayLine bool
-	containerStack    []byte
+	line           int
+	column         int
+	insideString   bool
+	escaped        bool
+	containerStack []byte
 }
 
 func LocateSourceCoordinate(payload []byte, offset int64) (SourceCoordinate, error) {
@@ -49,15 +47,12 @@ func (c *sourceCursor) consume(value byte) error {
 		c.insideString = true
 		c.column = c.column + 1
 	case '[':
-		c.arrayDepth = c.arrayDepth + 1
 		c.containerStack = append(c.containerStack, value)
-		c.suppressArrayLine = true
 		c.column = c.column + 1
 	case ']':
 		if err := c.closeContainer('['); err != nil {
 			return err
 		}
-		c.arrayDepth = c.arrayDepth - 1
 		c.column = c.column + 1
 	case '{':
 		c.containerStack = append(c.containerStack, value)
@@ -72,9 +67,6 @@ func (c *sourceCursor) consume(value byte) error {
 	case '\r':
 		return nil
 	default:
-		if value != ' ' && value != '\t' {
-			c.suppressArrayLine = false
-		}
 		c.column = c.column + 1
 	}
 	return nil
@@ -102,9 +94,7 @@ func (c *sourceCursor) consumeString(value byte) {
 }
 
 func (c *sourceCursor) consumeNewline() {
-	policy := SourceLinePolicy{ArrayDepth: c.arrayDepth, AfterArrayOpening: c.suppressArrayLine, InsideString: c.insideString}
-	c.line = policy.NextLine(c.line)
-	c.suppressArrayLine = false
+	c.line = SourceLinePolicy{}.NextLine(c.line)
 	c.column = 1
 }
 
