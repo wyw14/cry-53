@@ -25,13 +25,14 @@ func NewDependencyGraph(nodes []DependencyNode) *DependencyGraph {
 	return graph
 }
 
+// Connect 仅在两端节点都存在时把边加入图，供环检测使用。是否允许跨环境
+// 引用属于校验职责，不在此处判定，否则跨环境的边会被静默丢弃，既无法报告
+// 环境冲突，也无法在跨环境闭环中检测出循环引用。
 func (g *DependencyGraph) Connect(edge DependencyEdge) bool {
-	from, fromKnown := g.nodes[edge.From]
-	to, toKnown := g.nodes[edge.To]
-	if !fromKnown || !toKnown {
+	if _, fromKnown := g.nodes[edge.From]; !fromKnown {
 		return false
 	}
-	if from.Environment != to.Environment {
+	if _, toKnown := g.nodes[edge.To]; !toKnown {
 		return false
 	}
 	g.edges[edge.From] = append(g.edges[edge.From], edge.To)

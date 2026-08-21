@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 
 	"github.com/wyw14/cry-053/internal/domain"
 	"github.com/wyw14/cry-053/internal/repository"
@@ -63,61 +62,17 @@ func (v *DependencyValidator) Validate(ctx context.Context, configs []domain.Con
 					continue
 				}
 			}
-			if !graph.Connect(domain.DependencyEdge{From: config.ID, To: target}) {
-				continue
-			}
+			// 环境边界约束与环检测是两件独立的事：先记录跨环境冲突，再把边
+			// 加入图用于环检测。若让 Connect 因环境不同而拒绝加边，跨环境引用
+			// 会被静默丢弃，既漏报环境冲突，也无法在跨环境闭环中检出循环引用。
 			if targetConfig.Environment != config.Environment {
 				issues = append(issues, issue("ENVIRONMENT_CONFLICT", fmt.Sprintf("configurations[%d].values.%s", index, field.Name), "引用跨越了环境边界", "引用同一环境中的配置版本"))
 			}
+			graph.Connect(domain.DependencyEdge{From: config.ID, To: target})
 		}
 	}
 	for _, cycle := range graph.Cycles() {
 		issues = append(issues, issue("REFERENCE_CYCLE", "configurations", "检测到循环引用: "+fmt.Sprint(cycle), "解除环中的至少一条引用"))
 	}
 	return issues
-}
-
-func findCycles(graph map[string][]string) [][]string {
-	const unseen, visiting, visited = 0, 1, 2
-	state := make(map[string]int)
-	stack := make([]string, 0)
-	cycles := make([][]string, 0)
-	var visit func(string)
-	visit = func(node string) {
-		state[node] = visiting
-		stack = append(stack, node)
-		neighbors := append([]string(nil), graph[node]...)
-		sort.Strings(neighbors)
-		for _, next := range neighbors {
-			if state[next] == unseen {
-				visit(next)
-				continue
-			}
-			if state[next] == visiting {
-				start := 0
-				for index, candidate := range stack {
-					if candidate == next {
-						start = index
-						break
-					}
-				}
-				cycle := append([]string(nil), stack[start:]...)
-				cycle = append(cycle, next)
-				cycles = append(cycles, cycle)
-			}
-		}
-		stack = stack[:len(stack)-1]
-		state[node] = visited
-	}
-	keys := make([]string, 0, len(graph))
-	for key := range graph {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		if state[key] == unseen {
-			visit(key)
-		}
-	}
-	return cycles
 }
